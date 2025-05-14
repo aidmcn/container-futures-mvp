@@ -53,9 +53,11 @@ export default function OrderBook({ legId }) {
         <h4>Bids</h4>
         {bids.length > 0 ? (
           <ul style={listStyle}>
-            {/* Sort bids: highest price first */}
-            {[...bids].sort((a, b) => b[0] - a[0]).slice(0, 10).map((bid, index) => (
-              <li key={bid[1] || index}>Price: {bid[0].toFixed(2)} (ID: ...{bid[1].slice(-6)})</li>
+            {/* Bids format: [price, order_id, qty] */}
+            {[...bids].slice(0, 10).map((bid, index) => (
+              <li key={bid[1] || index}>
+                Qty: {bid[2]} @ {bid[0].toFixed(2)} (ID: ...{bid[1].slice(-6)})
+              </li>
             ))}
           </ul>
         ) : (
@@ -66,10 +68,11 @@ export default function OrderBook({ legId }) {
         <h4>Asks</h4>
         {asks.length > 0 ? (
           <ul style={listStyle}>
-            {/* Sort asks: lowest price first (already sorted this way from backend) */}
-            {/* Asks are already sorted by price ascending from snapshot_book */}
+            {/* Asks format: [price, order_id, qty] */}
             {asks.slice(0, 10).map((ask, index) => (
-              <li key={ask[1] || index}>Price: {ask[0].toFixed(2)} (ID: ...{ask[1].slice(-6)})</li>
+              <li key={ask[1] || index}>
+                Qty: {ask[2]} @ {ask[0].toFixed(2)} (ID: ...{ask[1].slice(-6)})
+              </li>
             ))}
           </ul>
         ) : (

@@ -22,6 +22,8 @@ export default function TradeFeed({ legId }) {
               price: parseFloat(matchData.price),
               qty: parseInt(matchData.qty, 10),
               ts: matchData.ts, // Keep as string, or parse if needed for display
+              bid_trader: matchData.bid_trader,
+              ask_trader: matchData.ask_trader,
               // raw: matchData // For debugging if needed
             };
           }).reverse(); // Show latest trades first
@@ -55,7 +57,9 @@ export default function TradeFeed({ legId }) {
     <ul style={{ fontSize: "0.8rem", maxHeight: 100, overflowY: "auto", paddingLeft: '20px', listStyleType: 'disc' }}>
       {trades.map(t => (
         <li key={t.id}>
-          {t.ts ? new Date(t.ts).toLocaleTimeString() : 'Time N/A'}: Qty {t.qty} @ {t.price.toFixed(2)}
+          {t.ts ? new Date(t.ts).toLocaleTimeString() : 'Time N/A'}: 
+          <strong>{t.bid_trader}</strong> buys from <strong>{t.ask_trader}</strong> - 
+          Qty {t.qty} @ {t.price.toFixed(2)}
         </li>
       ))}
     </ul>

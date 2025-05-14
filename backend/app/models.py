@@ -24,6 +24,8 @@ class Match(BaseModel):
     leg_id: str
     bid_id: str
     ask_id: str
+    bid_trader: str
+    ask_trader: str
     price: float
     qty: int
     ts: datetime = Field(default_factory=datetime.utcnow)

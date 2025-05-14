@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import OrderBook from './components/OrderBook.jsx';
 import TradeFeed from './components/TradeFeed.jsx';
 import Timeline from './components/Timeline.jsx';
+import ManualOrderForm from './components/ManualOrderForm.jsx';
 // For styling, create and import a CSS file, e.g.:
 // import './App.css'; 
 
@@ -9,10 +10,34 @@ const LEGS = ["L1", "L2", "L3", "CONT"]; // Shenzhen→Rotterdam, Rotterdam→Du
 
 function App() {
   const [simulationClock, setSimulationClock] = useState(0);
+  const [isSimulationRunning, setIsSimulationRunning] = useState(false);
+  const [isSimulationPaused, setIsSimulationPaused] = useState(false);
   const [balances, setBalances] = useState({});
   const [iotProgress, setIotProgress] = useState({}); // App will now manage IoT for Timeline
   const [currentOwner, setCurrentOwner] = useState('N/A'); // For CONT leg
   // Add state for manual order form if implemented here
+
+  const callApi = useCallback(async (endpoint, method = 'POST', body = null) => {
+    try {
+      const options = { method };
+      if (body) {
+        options.headers = { 'Content-Type': 'application/json' };
+        options.body = JSON.stringify(body);
+      }
+      const response = await fetch(`http://localhost:8000${endpoint}`, options);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        console.error(`API Error (${endpoint}):`, response.status, errorData.message);
+        alert(`Error: ${errorData.message || 'Failed to perform action'}`);
+        return null;
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(`Network Error (${endpoint}):`, error);
+      alert(`Network error: ${error.message}`);
+      return null;
+    }
+  }, []);
 
   // Main WebSocket connection for global data like clock, balances, global IoT
   useEffect(() => {
@@ -31,6 +56,15 @@ function App() {
         }
         if (msg.iot_progress) { // App handles IoT data for Timeline
           setIotProgress(msg.iot_progress);
+        }
+        if (msg.is_running !== undefined) {
+          setIsSimulationRunning(msg.is_running);
+        }
+        if (msg.is_paused !== undefined) {
+          setIsSimulationPaused(msg.is_paused);
+        }
+        if (msg.current_owner) {
+          setCurrentOwner(msg.current_owner);
         }
         // Potentially update currentOwner if CONT leg matches appear in global matches or a specific field
         if (msg.matches && msg.matches.some(m => m[1].leg_id === 'CONT')) {
@@ -58,21 +92,40 @@ function App() {
     };
   }, []);
 
-  const handlePlay = () => console.log("Play clicked - TODO: Call backend /play");
-  const handlePause = () => console.log("Pause clicked - TODO: Call backend /pause");
-  const handleReset = () => console.log("Reset clicked - TODO: Call backend /reset");
+  const handlePlay = useCallback(() => callApi('/play'), [callApi]);
+  const handlePause = useCallback(() => {
+    if (isSimulationRunning && !isSimulationPaused) callApi('/pause');
+    else if (isSimulationRunning && isSimulationPaused) callApi('/resume');
+  }, [callApi, isSimulationRunning, isSimulationPaused]);
+  const handleReset = useCallback(async () => {
+    const result = await callApi('/reset', 'POST');
+    if (result) {
+      console.log("Reset successful, clearing frontend state.");
+      setSimulationClock(0);
+      setIsSimulationRunning(false);
+      setIsSimulationPaused(false);
+      setBalances({});
+      setIotProgress({});
+      setCurrentOwner('N/A');
+      // Child components (OrderBook, TradeFeed) will receive empty data 
+      // from their WebSockets as Redis is flushed and backend pushes new state.
+      // No explicit call to child component reset methods is needed if they derive from props/WebSocket.
+      alert("Simulation reset. Click Play to restart.");
+    }
+  }, [callApi]);
 
   // Basic inline styles for structure. Consider moving to App.css for more complex styling.
   const appHeaderStyle = { textAlign: 'center', marginBottom: '20px' };
   const legsContainerStyle = { display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', marginBottom: '20px' };
-  const legPanelStyle = { border: '1px solid #ccc', padding: '10px', margin: '5px', width: '23%', minWidth: '280px' };
+  const legPanelStyle = { border: '1px solid #ccc', padding: '10px', margin: '5px', width: 'calc(25% - 10px)', minWidth: '280px', boxSizing: 'border-box' };
   const controlsContainerStyle = { textAlign: 'center', margin: '20px 0' };
   const buttonStyle = { margin: '0 5px', padding: '10px 15px' };
-  const infoContainerStyle = { display: 'flex', justifyContent: 'space-between', marginTop: '20px', flexWrap: 'wrap' };
-  const balancesTableStyle = { fontSize: '0.8em', width: '45%', borderCollapse: 'collapse' };
+  const infoContainerStyle = { display: 'flex', justifyContent: 'space-between', marginTop: '20px', flexWrap: 'wrap', gap: '2%' };
+  const columnStyle = { width: '48%', boxSizing: 'border-box' };
+  const balancesTableStyle = { fontSize: '0.8em', width: '100%', borderCollapse: 'collapse' };
   const thTdStyle = { border: '1px solid #ddd', padding: '4px', textAlign: 'left' };
-  const clockStyle = { fontSize: '1.5em', fontWeight: 'bold' };
-  const ownerStyle = { fontSize: '1.2em', margin: '10px 0' };
+  const clockStyle = { fontSize: '1.5em', fontWeight: 'bold', marginRight: '20px' };
+  const ownerStyle = { fontSize: '1.2em', margin: '10px 0', textAlign: 'center' };
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -81,19 +134,19 @@ function App() {
   };
 
   return (
-    <div className="App" style={{ fontFamily: 'sans-serif', margin: '0 auto', padding: '20px', maxWidth: '1400px' }}>
+    <div className="App" style={{ fontFamily: 'sans-serif', margin: '0 auto', padding: '20px', maxWidth: '1600px' }}>
       <header style={appHeaderStyle}>
         <h1>Container Futures Exchange MVP</h1>
       </header>
       
       <div style={controlsContainerStyle}>
-        <span style={clockStyle}>Clock: {formatTime(simulationClock)}</span>
-        <button onClick={handlePlay} style={buttonStyle}>Play</button>
-        <button onClick={handlePause} style={buttonStyle}>Pause</button>
+        <span style={clockStyle}>Clock: {formatTime(simulationClock)} ({isSimulationRunning ? (isSimulationPaused ? 'Paused' : 'Running') : 'Stopped'})</span>
+        <button onClick={handlePlay} style={buttonStyle} disabled={isSimulationRunning && !isSimulationPaused}>Play</button>
+        <button onClick={handlePause} style={buttonStyle} disabled={!isSimulationRunning}>{isSimulationPaused ? 'Resume' : 'Pause'}</button>
         <button onClick={handleReset} style={buttonStyle}>Reset</button>
       </div>
 
-      <div style={ownerStyle}>Current Container Owner (CONT Leg): {currentOwner}</div>
+      <div style={ownerStyle}>Current Container Owner (CONT Leg): <strong>{currentOwner}</strong></div>
 
       <div className="legs-container" style={legsContainerStyle}>
         {LEGS.map(legId => (
@@ -112,24 +165,20 @@ function App() {
       </div>
 
       <div style={infoContainerStyle}>
-        <div className="timeline-container" style={{ width: '45%', border: '1px solid #ccc', padding: '10px' }}>
+        <div className="timeline-container" style={{...columnStyle, border: '1px solid #ccc', padding: '10px' }}>
           <h2 style={{ marginTop: 0 }}>Shipment Timeline</h2>
           {/* Pass iotProgress and relevant legs to Timeline */}
           <Timeline legs={["L1", "L2", "L3"]} iotProgressData={iotProgress} />
         </div>
 
-        <div className="balances-container" style={{ width: '45%' }}>
+        <div className="balances-container" style={columnStyle}>
           <h3 style={{ marginTop: 0 }}>Account Balances</h3>
           <table style={balancesTableStyle}>
             <thead>
-              <tr>
-                <th style={thTdStyle}>Trader</th>
-                <th style={thTdStyle}>Balance</th>
-                <th style={thTdStyle}>Locked</th>
-              </tr>
+              <tr><th style={thTdStyle}>Trader</th><th style={thTdStyle}>Balance</th><th style={thTdStyle}>Locked</th></tr>
             </thead>
             <tbody>
-              {Object.entries(balances).map(([trader, bal]) => (
+              {Object.entries(balances).sort((a,b) => a[0].localeCompare(b[0])).map(([trader, bal]) => (
                 <tr key={trader}>
                   <td style={thTdStyle}>{trader}</td>
                   <td style={thTdStyle}>{typeof bal.balance === 'number' ? bal.balance.toFixed(2) : bal.balance}</td>
@@ -141,10 +190,9 @@ function App() {
         </div>
       </div>
       
-      {/* Placeholder for Manual Order Form */}
       <div style={{ marginTop: '20px', padding: '10px', border: '1px solid #eee' }}>
         <h3 style={{ marginTop: 0 }}>Manual Order</h3>
-        <p>Order form UI to be implemented here.</p>
+        <ManualOrderForm legs={LEGS} traders={Object.keys(balances)} callApi={callApi} />
       </div>
 
     </div>
