@@ -8,7 +8,6 @@ def _book_key(side: str, leg_id: str) -> str:
     return f"{side}:{leg_id}"
 
 def submit_order(side: str, leg_id: str, price: float, qty: int, trader: str) -> Match | None:
-    """Insert order, try to cross, return a Match object if trade occurs"""
     order = Order(
         id=str(uuid.uuid4()),
         leg_id=leg_id,
@@ -17,11 +16,11 @@ def submit_order(side: str, leg_id: str, price: float, qty: int, trader: str) ->
         price=price,
         qty=qty,
     )
+
     opposite = "ask" if side == "bid" else "bid"
     opp_key = _book_key(opposite, leg_id)
-    me_key = _book_key(side, leg_id)
+    me_key  = _book_key(side, leg_id)
 
-    # check top of opposite book
     best_opp = r.zrange(opp_key, 0, 0, withscores=True)
     crossed = (
         best_opp
@@ -31,6 +30,7 @@ def submit_order(side: str, leg_id: str, price: float, qty: int, trader: str) ->
     if crossed:
         best_id, best_price = best_opp[0]
         r.zrem(opp_key, best_id)
+
         match = Match(
             id=str(uuid.uuid4()),
             leg_id=leg_id,
@@ -39,7 +39,9 @@ def submit_order(side: str, leg_id: str, price: float, qty: int, trader: str) ->
             price=best_price,
             qty=1,
         )
-        r.xadd(f"matches:{leg_id}", match.model_dump())
+
+        payload = match.model_dump(mode="json")      # datetimes → ISO‑8601 strings
+        r.xadd(f"matches:{leg_id}", payload)
         return match
 
     # no cross – add to book
