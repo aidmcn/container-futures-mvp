@@ -26,15 +26,30 @@ def schedule():
     r.xadd("iot", {"leg_id": LEG1, "status": "delivered"})
 
     # 30 s – two new bids for container ownership
-    time.sleep(5)
+    time.sleep(5) # Current time: +10 (L1 match) + 15 (L1 deliver) + 5 = +30s
+    print("[SEEDER @ +30s] Submitting two bids for CONT leg")
     submit_order("bid", "CONT", 1000, 1, "CheapLtd")
-    submit_order("bid", "CONT", 1200, 1, "FastPLC")
+    submit_order("bid", "CONT", 1200, 1, "FastPLC") # FastPLC is current highest bidder
+
+    # +40 s: higher bidder overbids (use same submit_order)
+    # This means FastPLC (or another entity) bids higher for the container.
+    # If "winning" implies being the highest bid, this is it.
+    # If "winning" implies matching an ask, "CONT" leg currently has no asks.
+    time.sleep(10) # Current time: +30s + 10s = +40s
+    print("[SEEDER @ +40s] FastPLC overbids on CONT leg")
+    # Assuming FastPLC increases their own bid, or another higher bidder appears.
+    # Let's make a new, even higher bid from a different entity for clarity.
+    submit_order("bid", "CONT", 1500, 1, "WealthyCorp") 
 
     # 55 s – RTM→DUB
-    time.sleep(25)
+    # Need to adjust sleep: current time is +40s. Need +15s to reach +55s.
+    time.sleep(15) # Current time: +40s + 15s = +55s
+    print("[SEEDER @ +55s] Submitting bid for L2")
     submit_order("bid", LEG2, 4000, 1, SHIPPER)
 
     # 70 s – final legs delivered
-    time.sleep(15)
+    # Need to adjust sleep: current time is +55s. Need +15s to reach +70s.
+    time.sleep(15) # Current time: +55s + 15s = +70s
+    print("[SEEDER @ +70s] Marking L2 & L3 delivered")
     r.xadd("iot", {"leg_id": LEG2, "status": "delivered"})
     r.xadd("iot", {"leg_id": LEG3, "status": "delivered"})
