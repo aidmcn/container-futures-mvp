@@ -22,7 +22,11 @@ def ob(leg_id: str):
 async def ws(ws: WebSocket, leg_id: str):
     await ws.accept()
     while True:
-        await ws.send_text(json.dumps(snapshot_book(leg_id)))
-        await ws.send_text(json.dumps({"matches": r.xrange(f"matches:{leg_id}", count=5)}))
-        await ws.send_text(json.dumps({"iot": r.xrevrange("iot", count=5)}))
+        # Consolidate data into a single message
+        data_to_send = {
+            "orderbook": snapshot_book(leg_id),
+            "matches": r.xrange(f"matches:{leg_id}", "-", "+", count=5),
+            "iot": r.xrevrange("iot", "+", "-", count=5)
+        }
+        await ws.send_text(json.dumps(data_to_send))
         await ws.receive_text()  # keep-alive

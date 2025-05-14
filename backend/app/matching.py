@@ -40,7 +40,9 @@ def submit_order(side: str, leg_id: str, price: float, qty: int, trader: str) ->
             qty=1,
         )
 
-        payload = match.model_dump(mode="json")      # datetimes → ISO‑8601 strings
+        match_data = match.model_dump(mode="json")
+        # Ensure all payload values are Redis-compatible (str, int, float, bytes)
+        payload = {k: str(v) if not isinstance(v, (str, int, float, bytes)) else v for k, v in match_data.items()}
         r.xadd(f"matches:{leg_id}", payload)
         return match
 

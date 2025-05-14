@@ -9,6 +9,7 @@ def fund(trader: str, amt: float):
     r.hset(f"escrow:{trader}", mapping={"balance": amt, "locked": 0})
 
 def schedule():
+    time.sleep(3) # Optional delay to avoid Redis race condition on startup
     fund(SHIPPER, 20_000)
 
     # preload carrier asks for each leg
