@@ -95,41 +95,66 @@ def resume_simulation(main_app_sim_state_ref):
 
 def reset_simulation(main_app_sim_state_ref, redis_client):
     """Stops the current simulation, resets state, and clears relevant Redis data."""
-    global _simulation_thread, _is_running, _is_paused, _sim_clock_seconds, _stop_event
+    global _simulation_thread, _is_running, _is_paused, _sim_clock_seconds, _stop_event, _pause_event
     
+    print("[SCHEDULER] Received reset command.")
     if _is_running:
+        print("[SCHEDULER] Simulation is running, attempting to stop it first...")
         _stop_event.set() # Signal the thread to stop
-        if _is_paused:
-            _pause_event.clear() # If paused, need to unpause to allow it to see stop_event
+        if _is_paused: # If paused, it won't see the stop_event unless we unpause it
+            print("[SCHEDULER] Simulation is paused, unpausing to allow stop.")
+            _pause_event.clear()
+        
         if _simulation_thread and _simulation_thread.is_alive():
-            print("[SCHEDULER] Waiting for simulation thread to stop...")
-            _simulation_thread.join(timeout=5) # Wait for the thread to finish
+            print("[SCHEDULER] Waiting for simulation thread to join...")
+            _simulation_thread.join(timeout=5) # Wait up to 5 seconds
             if _simulation_thread.is_alive():
-                print("[SCHEDULER] Warning: Simulation thread did not stop gracefully.")
+                print("[SCHEDULER_WARN] Simulation thread did not join gracefully after 5s.")
+            else:
+                print("[SCHEDULER] Simulation thread joined successfully.")
+        else:
+            print("[SCHEDULER] No active simulation thread found to join, or already stopped.")
+    else:
+        print("[SCHEDULER] Simulation was not running.")
     
+    # Reset internal state AFTER ensuring thread is handled
     _is_running = False
     _is_paused = False
     _sim_clock_seconds = 0
-    _simulation_thread = None
-    _stop_event.clear()
-    _pause_event.clear()
+    _simulation_thread = None # Critical: ensure old thread object is cleared
+    _stop_event.clear()   # Reset for next run
+    _pause_event.clear()  # Reset for next run
+    print(f"[SCHEDULER] Internal flags reset: running={_is_running}, paused={_is_paused}, clock={_sim_clock_seconds}")
 
+    # Reset main.py's state reference
     main_app_sim_state_ref["running"] = False
     main_app_sim_state_ref["paused"] = False
     main_app_sim_state_ref["clock"] = 0
+    print(f"[SCHEDULER] Main app SIMULATION_APP_STATE updated by ref: {main_app_sim_state_ref}")
 
-    # Clear Redis data (example keys, adjust as needed)
-    print("[SCHEDULER] Flushing relevant Redis keys for reset...")
-    keys_to_delete = []
-    for key_pattern in ["bids:*", "asks:*", "matches:*", "orders:*", "iot", "escrow:*"]:
-        keys_to_delete.extend(redis_client.keys(key_pattern))
-    if keys_to_delete:
-        redis_client.delete(*keys_to_delete)
-        print(f"[SCHEDULER] Deleted {len(keys_to_delete)} keys from Redis.")
-    else:
-        print("[SCHEDULER] No relevant keys found in Redis to delete.")
+    print("[SCHEDULER] Attempting to FLUSHDB on Redis...")
+    try:
+        keys_before = redis_client.dbsize()
+        redis_client.flushdb()
+        keys_after = redis_client.dbsize()
+        print(f"[SCHEDULER] FLUSHDB executed. Keys before: {keys_before}, Keys after: {keys_after}.")
+        if keys_after != 0:
+            print(f"[SCHEDULER_WARN] Redis DB size is {keys_after} after FLUSHDB. Expected 0. Some keys might persist or be system keys.")
+            # Forcing deletion of known application keys as a fallback if flushdb seems incomplete for app data
+            known_key_patterns = ["bids:*", "asks:*", "matches:*", "orders:*", "iot", "escrow:*", "container_contract:*", "leg_meta:*", "leg_info:*", "leg_settlement_hold:*", "current_container_owner"]
+            deleted_count = 0
+            for pattern in known_key_patterns:
+                for key in redis_client.scan_iter(pattern):
+                    redis_client.delete(key)
+                    deleted_count += 1
+            if deleted_count > 0:
+                print(f"[SCHEDULER_INFO] Manually deleted {deleted_count} keys matching known patterns. DB size now: {redis_client.dbsize()}")
 
-    print("[SCHEDULER] Simulation reset complete. Ready to play.")
+    except Exception as e:
+        print(f"[SCHEDULER_ERROR] FLUSHDB or manual key deletion FAILED: {e}")
+        return False # Indicate reset failure
+
+    print("[SCHEDULER] Simulation reset complete. Ready for new /play.")
     return True
 
 # The old start() is no longer directly used by main.py

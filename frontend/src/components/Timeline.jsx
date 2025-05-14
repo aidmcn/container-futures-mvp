@@ -79,13 +79,13 @@ export default function Timeline({ legs }) {
   return (
     <div>
       {/* <h3>Shipment Progress</h3> // Title already in App.jsx */}
-      {legs.map(legId => {
-        const progressData = iotProgress[legId] || { percentage: 0, status: "Pending" };
+      {legs.map(leg => {
+        const progressData = iotProgress[leg.id] || { percentage: 0, status: "Pending" };
         const displayStatus = progressData.status === "Delivered" ? "Delivered" : `${Math.round(progressData.percentage)}%`;
 
         return (
-          <div key={legId} style={timelineBarStyle}>
-            <span style={legNameStyle}>{legId}:</span>
+          <div key={leg.id} style={timelineBarStyle}>
+            <span style={legNameStyle}>{leg.name || leg.id}:</span>
             <div style={progressBarContainerStyle}>
               <div style={progressBarStyle(progressData.percentage)}></div>
               <span style={progressTextStyle}>{displayStatus}</span>
