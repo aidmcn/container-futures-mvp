@@ -3,16 +3,16 @@ version: "3.9"
 services:
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports: [ "6379:6379" ]
 
   api:
-    build: ./backend   # Dockerfile provided below
-    depends_on: [redis]
-    ports: ["8000:8000"]
+    build: ./backend
+    depends_on: [ redis ]
     environment:
       - REDIS_HOST=redis
+    ports: [ "8000:8000" ]
 
   ui:
-    build: ./frontend  # Dockerfile provided below
-    depends_on: [api]
-    ports: ["5173:5173"]
+    build: ./frontend
+    depends_on: [ api ]
+    ports: [ "5173:5173" ]
